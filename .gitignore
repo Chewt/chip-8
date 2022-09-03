@@ -1,5 +1,6 @@
 vgcore*
 obj/**
 .ccls-cache/**
+.ccls
 chip8
 

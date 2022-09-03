@@ -28,13 +28,32 @@ char screen[SCREEN_HEIGHT][SCREEN_WIDTH];
 uint8_t delayTimer;
 uint8_t soundTimer;
 
+uint8_t fontset[80] =
+{
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+};
+
 void LoadRom(char* filename)
 {
-    FILE* f = fopen(filename, "r");
+    FILE* f = fopen(filename, "rb");
     int i = 512;
     char currByte; 
-    while ((currByte = fgetc(f)) != EOF)
-        mem[i++] = currByte;
+    fread(mem + 0x200, sizeof(char), 4096, f);
     fclose(f);
 }
 
@@ -83,13 +102,15 @@ void Execute(uint16_t opcode)
             {
                 case 0x00E0:
                     memset(screen, 0x0, SCREEN_WIDTH * SCREEN_HEIGHT);
+                    pc += 2;
                     break;
                 case 0x00EE:
-                    sc -= 2;
+                    --sc;
                     pc = stack[sc];
                     break;
                 default:
                     // Intentionally not implemented
+                    pc += 2;
                     break;
             }
             break;
@@ -98,41 +119,50 @@ void Execute(uint16_t opcode)
             break;
         case 0x2000:
             stack[sc] = pc;
-            sc += 2;
+            sc++;
             pc = NNN;
             break;
         case 0x3000:
             if (reg[X] == NN)
                 pc += 2;
+            pc += 2;
             break;
         case 0x4000:
             if (reg[X] != NN)
                 pc += 2;
+            pc += 2;
             break;
         case 0x5000:
             if (reg[X] == reg[Y])
                 pc += 2;
+            pc += 2;
             break;
         case 0x6000:
             reg[X] = NN;
+            pc += 2;
             break;
         case 0x7000:
             reg[X] += NN;
+            pc += 2;
             break;
         case 0x8000:
             switch (N)
             {
                 case 0x0:
                     reg[X] = reg[Y];
+                    pc += 2;
                     break;
                 case 0x1:
                     reg[X] |= reg[Y];
+                    pc += 2;
                     break;
                 case 0x2:
                     reg[X] &= reg[Y];
+                    pc += 2;
                     break;
                 case 0x3:
                     reg[X] ^= reg[Y];
+                    pc += 2;
                     break;
                 case 0x4:
                     if (reg[X] + reg[Y] > 255)
@@ -140,6 +170,7 @@ void Execute(uint16_t opcode)
                     else
                         reg[0xF] = 0;
                     reg[X] += reg[Y];
+                    pc += 2;
                     break;
                 case 0x5:
                     if (reg[X] >= reg[Y])
@@ -147,10 +178,12 @@ void Execute(uint16_t opcode)
                     else
                         reg[0xF] = 0;
                     reg[X] -= reg[Y];
+                    pc += 2;
                     break;
                 case 0x6:
                     reg[0xF] = reg[X] & 0x1;
                     reg[X] >>= 1;
+                    pc += 2;
                     break;
                 case 0x7:
                     if (reg[Y] >= reg[X])
@@ -158,50 +191,61 @@ void Execute(uint16_t opcode)
                     else
                         reg[0xF] = 0;
                     reg[X] = reg[Y] - reg[X];
+                    pc += 2;
                     break;
                 case 0xE:
                     reg[0xF] = reg[X] & 0x1000;
                     reg[X] <<= 1;
+                    pc += 2;
                     break;
             }
             break;
         case 0x9000:
             if (reg[X] != reg[Y])
                 pc += 2;
+            pc += 2;
             break;
         case 0xA000:
             I = NNN;
+            pc += 2;
             break;
         case 0xB000:
             pc = NNN + reg[0];
             break;
         case 0xC000:
             reg[X] = rand() & NN;
+            pc += 2;
             break;
         case 0xD000:
             reg[0xF] = 0;
+            uint16_t x = reg[X];
+            uint16_t y = reg[Y];
+
             for (i = 0; i < N; ++i)
             {
-                uint8_t row = mem[BigToLittle(I) + i];
+                uint8_t row = mem[I + i];
                 for (j = 0; j < 8; ++j)
                 {
                     int set = 0;
-                    if (screen[Y + i][X + j] == 1)
+                    if (screen[y + i][x + j] == 1)
                         set = 1;
-                    screen[Y + i][X + j] = (row >> (7 - j)) & 0x1;
-                    if (screen[Y + i][X + j] == 0 && set)
+                    screen[y + i][x + j] ^= (row >> (7 - j)) & 0x1;
+                    if (screen[y + i][x + j] == 0 && set)
                         reg[0xF] = 1;
                 }
             }
+            pc += 2;
             break;
         case 0xE000:
             switch (NN)
             {
                 case 0x9E:
                     //TODO
+                    pc += 2;
                     break;
                 case 0xA1:
                     //TODO
+                    pc += 2;
                     break;
             }
             break;
@@ -210,36 +254,45 @@ void Execute(uint16_t opcode)
             {
                 case 0x07:
                     reg[X] = delayTimer;
+                    pc += 2;
                     break;
                 case 0x0A:
                     //TODO
+                    pc += 2;
                     break;
                 case 0x15:
                     delayTimer = reg[X];
+                    pc += 2;
                     break;
                 case 0x18:
                     soundTimer = reg[X];
+                    pc += 2;
                     break;
                 case 0x1E:
-                    I = LittleToBig(BigToLittle(I) + BigToLittle(reg[X]));
+                    I += reg[X];
+                    pc += 2;
                     break;
                 case 0x29:
                     //TODO
+                    pc += 2;
                     break;
                 case 0x33:
                     //TODO
+                    pc += 2;
                     break;
                 case 0x55:
                     for (i = 0; i < X; ++i)
                     {
-                        *(mem + BigToLittle(I) + i * 2) = reg[i];
+                        *(mem + I + i * 2) = reg[i];
                     }
+                    pc += 2;
                     break;
                 case 0x65:
                     for (i = 0; i < X; ++i)
                     {
-                        reg[i] = *(mem + BigToLittle(I) + i * 2);
+                        reg[i] = *(mem + I + i * 2);
                     }
+                    pc += 2;
                     break;
             }
             break;
@@ -253,14 +306,18 @@ int main(int argc, char** argv)
         printf("Invalid usage.\n%s [rom]\n", argv[0]);
         return -1;
     }
+    int i;
+    for (i = 0; i < 80; ++i)
+        mem[i] = fontset[i];
     LoadRom(argv[1]);
     struct timeval prevTime, currTime;
     gettimeofday(&prevTime, NULL);
 
+
     double deltaTime = 0;
     int refresh = 0;
     int clock = 0;
-    pc = 512;
+    pc = 0x200;
     sc = 0;
     while(1)
     {
@@ -279,6 +336,7 @@ int main(int argc, char** argv)
         {
             refresh = 0;
             //memset(screen, 1, SCREEN_WIDTH * SCREEN_HEIGHT);
+            //screen[0][1] = 1;
             DrawScreen();
             if (soundTimer > 0)
                 soundTimer--;
@@ -289,9 +347,10 @@ int main(int argc, char** argv)
         // Clock events
         if (clock >= CLOCK_RATE)
         {
-            uint16_t opcode = (mem[pc] << 8) + mem[pc + 1];
-            pc += 2;
+            clock = 0;
+            uint16_t opcode = (mem[pc] << 8) | mem[pc + 1];
             Execute(opcode);
+            //pc += 2;
         }
     }
     
